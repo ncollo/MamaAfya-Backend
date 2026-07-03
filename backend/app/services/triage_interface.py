@@ -12,10 +12,8 @@ logger = logging.getLogger(__name__)
 
 def calculate_risk_level(symptoms: List[str], gestational_age_weeks: Optional[int]) -> str:
     """
-    Clinical Triage Algorithm placeholder. Collins will implement his code here.
-    
-    Collins: Check the symptoms (e.g. ['Severe headache', 'Swollen feet', 'Bleeding'])
-    against the gestational_age_weeks.
+    Comprehensive Clinical Triage Algorithm.
+    Evaluates both antenatal and postnatal symptoms against gestational context.
     
     Risk classifications:
     - 'green': Normal / low risk
@@ -25,33 +23,51 @@ def calculate_risk_level(symptoms: List[str], gestational_age_weeks: Optional[in
     if not symptoms:
         return "green"
         
+    # Standardize input to handle both precise USSD keys and free-text PWA payloads
     symptoms_lower = [s.lower() for s in symptoms]
     
-    # High-risk symptoms (Red)
+    # 1. High-risk danger signs (RED) - Combined keys and free-text flags
     red_flags = [
-        "bleeding", "vaginal bleeding", "severe headache", "blurred vision", 
-        "convulsions", "fits", "difficulty breathing", "severe abdominal pain",
-        "fever", "high fever", "reduced baby movement", "no baby movement"
+        # Antenatal
+        "severe_headache", "blurred_vision", "heavy_bleeding", "bleeding", "vaginal bleeding",
+        "water_breaking_early", "reduced_fetal_movement", "seizures", "convulsions", "fits",
+        "difficulty breathing", "severe abdominal pain", "fever", "high fever", 
+        "reduced baby movement", "no baby movement", "emergency_button",
+        
+        # Postnatal (Maternal & Neonatal)
+        "postpartum_hemorrhage", "foul_discharge", "mastitis", 
+        "neonatal_lethargy", "cord_infection", "neonatal_fever"
     ]
     
-    # Moderate-risk symptoms (Yellow)
+    # 2. Moderate-risk warning signs (YELLOW)
     yellow_flags = [
-        "swollen feet", "swollen hands", "mild headache", "nausea", 
-        "vomiting", "dizziness", "constipation", "heartburn"
+        "swollen feet", "swollen_feet", "swollen hands", "mild headache", "nausea", 
+        "persistent_nausea", "vomiting", "dizziness", "constipation", "heartburn",
+        "mild_fever", "mild_pain", "unlisted_symptom", "other_escalate"
     ]
-    
+
+    # 3. Check for RED / High Risk triggers
     for symptom in symptoms_lower:
         if any(flag in symptom for flag in red_flags):
             return "red"
             
+    # 4. Contextual Check: Swollen feet late in pregnancy (e.g., > 30 weeks) is a preeclampsia risk
+    swollen_feet_flags = ["swollen feet", "swollen_feet"]
+    for symptom in symptoms_lower:
+        if any(flag in symptom for flag in swollen_feet_flags):
+            if gestational_age_weeks is not None and gestational_age_weeks > 30:
+                return "yellow"
+
+    # 5. Check for YELLOW / Medium Risk triggers
     for symptom in symptoms_lower:
         if any(flag in symptom for flag in yellow_flags):
             return "yellow"
             
-    # Fallback clinical logic: 3+ mild symptoms trigger medium risk
+    # 6. Fallback clinical logic: 3 or more mild symptoms automatically trigger medium risk
     if len(symptoms) >= 3:
         return "yellow"
         
+    # 7. Default to GREEN / Routine
     return "green"
 
 async def run_triage(symptom_log_id: int, db: AsyncSession, sio = None) -> str:

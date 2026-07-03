@@ -66,20 +66,3 @@ The centralized backend Maternal Health Information System (MHIS) for the MamaAf
 6. **Interactive Documentation**:
    Once the server starts, open your browser and navigate to:
    [http://localhost:8000/docs](http://localhost:8000/docs) (Swagger UI) to interact with and test all the endpoints.
-
----
-
-## Integration Guide for Collins (Triage Engine)
-
-Collins, the clinical triage system is integrated directly into Nelson's patient management system.
-
-The code entry point is located in [triage_interface.py](file:///c:/Users/nelso/OneDrive/Desktop/MAMA%20AFYA%20mobile%20responsive/backend/app/services/triage_interface.py).
-
-### How to Implement
-1. Open [triage_interface.py](file:///c:/Users/nelso/OneDrive/Desktop/MAMA%20AFYA%20mobile%20responsive/backend/app/services/triage_interface.py).
-2. Locate the function `calculate_risk_level(symptoms: list[str], gestational_age_weeks: int | None) -> str`.
-3. Replace the placeholder rules with the clinical triage calculations:
-   - Perform safety overrides (e.g., check for vaginal bleeding, convulsions, blurred vision, severe headache).
-   - Evaluate symptoms against the pregnancy trimester/gestational week.
-   - Return one of the string statuses: `"green"`, `"yellow"`, or `"red"`.
-4. The caller function `run_triage` will automatically persist your evaluated risk on the database records, update the mother's dashboard status, and dispatch real-time dashboard events (`patient_update` and `new_alert` rooms) over Socket.IO.

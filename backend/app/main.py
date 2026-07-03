@@ -7,6 +7,7 @@ import logging
 
 from app.config import settings
 from app.database import init_db
+from app.routers import ussd
 from app.routers.auth import router as auth_router
 from app.routers.mothers import router as mothers_router
 from app.routers.birth_plans import router as birth_plans_router
@@ -73,6 +74,7 @@ app.include_router(mothers_router)
 app.include_router(birth_plans_router)
 app.include_router(chw_router)
 app.include_router(appointments_router)
+app.include_router(ussd.router, prefix="/api/ussd", tags=["USSD Webhook"])
 
 @app.get("/api/health", tags=["Health Checks"])
 async def health_check():
