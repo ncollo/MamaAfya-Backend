@@ -7,7 +7,7 @@ on:
 
 env:
   AZURE_WEBAPP_NAME: mamaafya
-  IMAGE_NAME: ghcr.io/ncollo/mamaafya-backend/backend:latest
+  IMAGE_NAME: ghcr.io/${{ github.repository }}/backend:latest
 
 jobs:
   build-and-deploy:
