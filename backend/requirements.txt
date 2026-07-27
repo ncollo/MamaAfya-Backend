@@ -1,0 +1,13 @@
+fastapi[standard]
+uvicorn[standard]
+sqlalchemy[asyncio]
+aiosqlite
+asyncpg
+python-jose[cryptography]
+bcrypt
+python-dotenv
+pydantic-settings
+python-socketio
+python-multipart
+httpx
+pytest
