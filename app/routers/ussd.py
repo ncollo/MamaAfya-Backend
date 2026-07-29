@@ -49,6 +49,9 @@ async def ussd_callback(
 
     # Fetch context: Tells us if she is antenatal or postnatal, and gets her CHW
     context = await fetch_patient_context(phoneNumber, db)
+    
+    if not context or not context.get("id"):
+        return Response(content="END Samahani, nambari yako haijasajiliwa kikamilifu kwenye mfumo wa MamaAfya.", media_type="text/plain")
     phase = context.get("phase", "antenatal")
     chw_phone = context.get("assigned_chw_phone", "+254700000000")
     
