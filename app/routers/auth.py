@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
+from app.models.mother_profile import MotherProfile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from datetime import timedelta
+from sqlalchemy import select
 
 from app.database import get_db
 from app.models.user import User
@@ -122,3 +124,27 @@ async def refresh_token(refresh_token: str, db: AsyncSession = Depends(get_db)):
 async def get_me(current_user: User = Depends(get_current_user)):
     """Get the current authenticated user info"""
     return current_user
+
+@router.delete("/users?by-email/{email}")
+async def hard_delete_user_by_email(email: str, db: AsyncSession = Depends(get_db)):
+    
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    
+    if user.role == "mother":
+        profile_result = await db.execute(
+            select(MotherProfile).where(MotherProfile.user_id == user.id)
+        )
+        profile = profile_result.scalar_one_or_none()
+        if profile:
+            await db.delete(profile)
+    
+    
+    await db.delete(user)
+    await db.commit()
+    
+    return {"message": f"User with email {email} permanently deleted."}
