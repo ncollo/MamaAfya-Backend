@@ -4,7 +4,7 @@ from app.models.mother_profile import MotherProfile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from datetime import timedelta
-from sqlalchemy import select
+from sqlalchemy import or_
 
 from app.database import get_db
 from app.models.user import User
@@ -125,14 +125,18 @@ async def get_me(current_user: User = Depends(get_current_user)):
     """Get the current authenticated user info"""
     return current_user
 
-@router.delete("/users?by-email/{email}")
-async def hard_delete_user_by_email(email: str, db: AsyncSession = Depends(get_db)):
+@router.delete("/users/hard-delete")
+async def hard_delete_user(identifier: str, db: AsyncSession = Depends(get_db)):
     
-    result = await db.execute(select(User).where(User.email == email))
+    result = await db.execute(
+        select(User).where(
+            or_(User.email == identifier, User.phone_number == identifier)
+        )
+    )
     user = result.scalar_one_or_none()
     
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail=f"User with identifier '{identifier}' not found in database")
         
     
     if user.role == "mother":
@@ -147,4 +151,4 @@ async def hard_delete_user_by_email(email: str, db: AsyncSession = Depends(get_d
     await db.delete(user)
     await db.commit()
     
-    return {"message": f"User with email {email} permanently deleted."}
+    return {"message": f"User '{identifier}' permanently deleted from the database."}
