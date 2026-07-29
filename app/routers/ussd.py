@@ -1,11 +1,12 @@
-from fastapi import Depends
+from fastapi import Depends, APIRouter, Form, Response
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.database import get_db
-from fastapi import APIRouter, Form, Response
 from typing import Optional
+
+from app.database import get_db
 from app.services.triage_interface import run_triage
 from app.services.sms_service import dispatch_emergency_sms
 from app.services.event_dispatcher import fetch_patient_context
+from app.models.symptom_log import SymptomLog  # <-- NEW IMPORT
 
 router = APIRouter()
 
@@ -64,7 +65,6 @@ async def ussd_callback(
     # LEVEL 1: Symptom Reporting or Emergency
     elif level == 1:
         if user_path[0] == "1":
-            # Dynamically generate the symptom list based on her phase
             response = active_menu["title"]
             for key, value in active_menu["options"].items():
                 response += f"{key}. {value['text']}\n"
@@ -74,8 +74,13 @@ async def ussd_callback(
             alert_msg = f"EMERGENCY: {context.get('first_name')} ({phoneNumber}) requested immediate help."
             await dispatch_emergency_sms(chw_phone, alert_msg)
             
-            # Send the emergency trigger through the unified engine
-            await run_triage(context.get("id"), db, ["emergency_button"])
+            # FIX: Create and save the symptom log first
+            new_log = SymptomLog(mother_profile_id=context.get("id"), symptoms=["emergency_button"])
+            db.add(new_log)
+            await db.commit()
+            await db.refresh(new_log)
+            
+            await run_triage(new_log.id, db)
             
             response = "END Tumeitisha msaada. Mhudumu wako anakuja."
         else:
@@ -90,24 +95,29 @@ async def ussd_callback(
             symptom_key = options[selected_option]["symptom"]
             
             if symptom_key == "other_escalate":
-                # Handle the "Other" option
                 alert_msg = f"CALLBACK REQUIRED: {context.get('first_name')} ({phoneNumber}) reported an unlisted symptom. Please call them."
                 await dispatch_emergency_sms(chw_phone, alert_msg)
                 
-                # Send the unlisted symptom through the unified engine
-                await run_triage(context.get("id"), db, ["unlisted_symptom"])
+                # FIX: Create and save the symptom log first
+                new_log = SymptomLog(mother_profile_id=context.get("id"), symptoms=["unlisted_symptom"])
+                db.add(new_log)
+                await db.commit()
+                await db.refresh(new_log)
+                
+                await run_triage(new_log.id, db)
                 
                 response = "END Tumemjulisha mhudumu. Atakupigia simu hivi punde."
                 
             else:
-                # Run it through the engine
-                risk_status = await run_triage(
-                    context.get("id"),
-                    db, 
-                    [symptom_key]
-                )
+                # FIX: Create and save the symptom log first
+                new_log = SymptomLog(mother_profile_id=context.get("id"), symptoms=[symptom_key])
+                db.add(new_log)
+                await db.commit()
+                await db.refresh(new_log)
                 
-                # Check the risk status returned by Nelson's engine
+                # Pass the new log's ID into the engine
+                risk_status = await run_triage(new_log.id, db)
+                
                 if risk_status == "red":
                     alert_msg = f"URGENT: {context.get('first_name', 'Mama')} ({phoneNumber}) reported HIGH RISK: {options[selected_option]['text']}."
                     await dispatch_emergency_sms(chw_phone, alert_msg)
