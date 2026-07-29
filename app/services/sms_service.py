@@ -14,8 +14,7 @@ AT_USERNAME = os.getenv("AT_USERNAME", "sandbox")
 AT_API_KEY = os.getenv("AT_API_KEY")
 
 # The direct Africa's Talking API endpoint for Sandbox SMS
-# Currently using the Sandbox URL; switch to the production URL when ready.
-AT_SMS_URL = "https://api.sandbox.africastalking.com/version1/messaging"
+AT_URL = "https://api.africastalking.com/version1/messaging"
 
 async def dispatch_emergency_sms(target_phone: str, message: str) -> dict:
     """
@@ -38,7 +37,7 @@ async def dispatch_emergency_sms(target_phone: str, message: str) -> dict:
     # verify=False is used temporarily to bypass local Sandbox SSL mismatches
     async with httpx.AsyncClient(verify=False) as client:
         try:
-            response = await client.post(AT_SMS_URL, headers=headers, data=payload)
+            response = await client.post(AT_URL, headers=headers, data=payload)
             
             # Check if the request was successful
             response.raise_for_status()
