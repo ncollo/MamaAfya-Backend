@@ -6,9 +6,15 @@ from app.config import settings
 # Determine if we are using SQLite or PostgreSQL
 is_sqlite = settings.DATABASE_URL.startswith("sqlite")
 
-# For SQLite, we want to allow concurrent operations if possible, but async handles it nicely.
-# We also use connect_args for SQLite specifically.
-connect_args = {"check_same_thread": False} if is_sqlite else {}
+
+connect_args = (
+    {"check_same_thread": False} 
+    if is_sqlite 
+    else {
+        "statement_cache_size": 0,
+        "prepared_statement_cache_size": 0
+    }
+)
 
 engine_kwargs = {
     "connect_args": connect_args,
