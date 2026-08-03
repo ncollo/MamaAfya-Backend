@@ -4,6 +4,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
+from datetime import date
+from pydantic import BaseModel
 
 from app.database import get_db
 from app.models.user import User
@@ -16,6 +18,11 @@ from app.schemas.appointment import AppointmentResponse
 from app.middleware.auth import get_current_user, require_role
 from pydantic import BaseModel
 from app.services.triage_interface import run_triage
+
+class DeliveryRecord(BaseModel):
+    delivery_date: date
+    notes: Optional[str] = None
+
 
 class SOSRequest(BaseModel):
     note: Optional[str] = None
@@ -349,3 +356,38 @@ async def botpress_symptom_webhook(
     await run_triage(new_log.id, db, sio=sio)
     
     return {"status": "success", "message": "Symptoms logged successfully. CHW notified."}
+
+
+@router.post("/patients/{profile_id}/record-delivery", status_code=status.HTTP_200_OK)
+async def record_patient_delivery(
+    profile_id: int,
+    payload: DeliveryRecord,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role("chw", "facility_staff"))
+):
+    """Transition a mother from antenatal (pregnancy) to postnatal care"""
+    
+    # 1. Fetch the mother's profile
+    result = await db.execute(select(MotherProfile).where(MotherProfile.id == profile_id))
+    profile = result.scalars().first()
+    
+    if not profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Mother profile not found"
+        )
+        
+    # 2. Update profile with delivery details
+    profile.delivery_date = payload.delivery_date
+    profile.is_postnatal = True # Make sure this column exists in your MotherProfile model, or adapt it to your schema
+    
+    # Optional: Save notes into medical history
+    if payload.notes:
+        history = profile.medical_history or {}
+        history["delivery_notes"] = payload.notes
+        profile.medical_history = history
+
+    await db.commit()
+    await db.refresh(profile)
+    
+    return {"status": "success", "message": "Patient successfully transitioned to postnatal care."}

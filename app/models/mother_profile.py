@@ -1,3 +1,5 @@
+from xmlrpc.client import Boolean
+
 from sqlalchemy import Column, Integer, String, Date, DateTime, ForeignKey, JSON, Text, func
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -14,6 +16,8 @@ class MotherProfile(Base):
     medical_history = Column(JSON, nullable=True, default=dict)
     allergies = Column(Text, nullable=True)
     nearest_facility = Column(String(255), nullable=True)
+    delivery_date = Column(Date, nullable-True)
+    is_postnatal = Column(Boolean, default=False)
     
     # pregnancy_status: 'antenatal', 'postpartum'
     pregnancy_status = Column(String(20), default="antenatal")
