@@ -63,7 +63,8 @@ async def get_triage_queue(
         
         # Format the data exactly how CHWDashboard.jsx expects it
         patient_list.append({
-            "id": str(m.id),
+            "id": str(m.profile.id) if m.profile else str(m.id), # Use MotherProfile ID if it exists!
+            "user_id": str(m.id),
             "name": m.full_name,
             "week": week_str,
             "status": risk_status,
