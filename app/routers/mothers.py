@@ -22,9 +22,9 @@ class SOSRequest(BaseModel):
     
 class BotpressSymptomPayload(BaseModel):
     phone_number: str
-    symptoms: List[str]
+    symptoms: str
     risk_level: str = "yellow"
-    notes: Optional[str] = None
+    summary: Optional[str] = None
     
 class BookVisitRequest(BaseModel):
     reason: Optional[str] = None
