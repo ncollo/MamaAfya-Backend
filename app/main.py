@@ -60,14 +60,24 @@ register_socket_events(sio)
 # Attach Socket.IO instance to app state so routers can emit events
 app.state.sio = sio
 
-# Configure CORS Middleware (Properly placed after app initialization)
+# --- UPDATED CORS CONFIGURATION ---
+# Combine your local frontend URL with the existing list from settings
+allowed_origins = ["http://localhost:5173", "http://localhost:3000"]
+if isinstance(settings.cors_origins_list, list):
+    allowed_origins.extend(settings.cors_origins_list)
+else:
+    # Fallback just in case settings.cors_origins_list is a single string
+    allowed_origins.append(settings.cors_origins_list)
+
+# Configure CORS Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins_list,
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# -----------------------------------
 
 # Include Nelson's Routers
 app.include_router(auth_router)
