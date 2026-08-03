@@ -59,6 +59,40 @@ async def create_profile(
     res = await db.execute(stmt)
     return res.scalars().first()
 
+@router.post("/profile-by-chw/{new_user_id}", response_model=MotherProfileResponse, status_code=status.HTTP_201_CREATED)
+async def create_profile_for_patient(
+    new_user_id: int,
+    profile_in: MotherProfileCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role("chw", "facility_staff"))
+):
+    """Allows a CHW to create a medical profile for a newly registered mother"""
+    
+    # 1. Verify the profile doesn't already exist
+    result = await db.execute(select(MotherProfile).where(MotherProfile.user_id == new_user_id))
+    if result.scalars().first():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Profile already exists for this patient"
+        )
+
+    # 2. Create the profile mapping it to the NEW user's ID, not the CHW's ID
+    db_profile = MotherProfile(
+        user_id=new_user_id,
+        last_menstrual_period=profile_in.last_menstrual_period,
+        medical_history={},
+        allergies=None,
+        nearest_facility=None
+    )
+    
+    db.add(db_profile)
+    await db.commit()
+    
+    # 3. Refresh and return
+    stmt = select(MotherProfile).where(MotherProfile.id == db_profile.id).options(selectinload(MotherProfile.user))
+    res = await db.execute(stmt)
+    return res.scalars().first()
+
 @router.get("/profile", response_model=MotherProfileResponse)
 async def get_own_profile(
     db: AsyncSession = Depends(get_db),

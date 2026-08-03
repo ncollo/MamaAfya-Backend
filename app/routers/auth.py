@@ -34,6 +34,22 @@ async def register(user_in: UserRegister, db: AsyncSession = Depends(get_db)):
                 detail="User with this phone number already registered"
             )
 
+    # --- PHASE 2: AUTO-ASSIGNMENT LOGIC ---
+    assigned_chw_id = user_in.assigned_chw_id
+    
+    # If the user registering is a mother and hasn't been explicitly assigned a CHW yet
+    if user_in.role == "mother" and not assigned_chw_id:
+        # Query the database for the first available, active CHW
+        # (In the future, this can be filtered by 'location' or 'facility code')
+        chw_result = await db.execute(
+            select(User).where(User.role == "chw", User.is_active == True)
+        )
+        available_chw = chw_result.scalars().first()
+        
+        if available_chw:
+            assigned_chw_id = available_chw.id
+    # --------------------------------------
+
     password_hash = auth_service.hash_password(user_in.password)
     
     new_user = User(
@@ -43,7 +59,7 @@ async def register(user_in: UserRegister, db: AsyncSession = Depends(get_db)):
         full_name=user_in.full_name,
         role=user_in.role,
         location=user_in.location,
-        assigned_chw_id=user_in.assigned_chw_id,
+        assigned_chw_id=assigned_chw_id, # Safely injected here!
         is_active=True
     )
     
@@ -127,7 +143,6 @@ async def get_me(current_user: User = Depends(get_current_user)):
 
 @router.delete("/users/hard-delete")
 async def hard_delete_user(identifier: str, db: AsyncSession = Depends(get_db)):
-    
     result = await db.execute(
         select(User).where(
             or_(User.email == identifier, User.phone_number == identifier)
@@ -138,7 +153,6 @@ async def hard_delete_user(identifier: str, db: AsyncSession = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=404, detail=f"User with identifier '{identifier}' not found in database")
         
-    
     if user.role == "mother":
         profile_result = await db.execute(
             select(MotherProfile).where(MotherProfile.user_id == user.id)
@@ -146,7 +160,6 @@ async def hard_delete_user(identifier: str, db: AsyncSession = Depends(get_db)):
         profile = profile_result.scalar_one_or_none()
         if profile:
             await db.delete(profile)
-    
     
     await db.delete(user)
     await db.commit()
