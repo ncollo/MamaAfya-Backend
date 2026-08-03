@@ -20,6 +20,12 @@ from app.services.triage_interface import run_triage
 class SOSRequest(BaseModel):
     note: Optional[str] = None
     
+class BotpressSymptomPayload(BaseModel):
+    phone_number: str
+    symptoms: List[str]
+    risk_level: str = "yellow"
+    notes: Optional[str] = None
+    
 class BookVisitRequest(BaseModel):
     reason: Optional[str] = None
     phone_number: Optional[str] = None
@@ -294,3 +300,52 @@ async def book_visit(
     """Book a clinic visit or receive a triage alert from Botpress"""
     # Later: Look up the mother by payload.phone_number and notify the CHW
     return {"detail": "Visit booked successfully"}
+
+
+@router.post("/botpress-webhook", status_code=status.HTTP_200_OK)
+async def botpress_symptom_webhook(
+    payload: BotpressSymptomPayload,
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    """Webhook for Botpress to log AI-gathered symptoms into the triage system."""
+    
+    # 1. Look up the mother by the phone number passed from the React webchat
+    user_res = await db.execute(select(User).where(User.phone_number == payload.phone_number))
+    user = user_res.scalars().first()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail="No user found with this phone number."
+        )
+        
+    # 2. Get her medical profile
+    profile_res = await db.execute(select(MotherProfile).where(MotherProfile.user_id == user.id))
+    profile = profile_res.scalars().first()
+    
+    if not profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail="Mother profile not found."
+        )
+        
+    # 3. Log the symptom into the database
+    new_log = SymptomLog(
+        mother_profile_id=profile.id,
+        symptoms=payload.symptoms,
+        source="botpress_ai",
+        risk_score=payload.risk_level,
+        triage_notes=payload.summary or "Symptoms reported via MamaBot AI chat.",
+        logged_by_id=user.id
+    )
+    
+    db.add(new_log)
+    await db.commit()
+    await db.refresh(new_log)
+    
+    # 4. Run the triage engine to update the CHW dashboard
+    sio = getattr(request.app.state, "sio", None)
+    await run_triage(new_log.id, db, sio=sio)
+    
+    return {"status": "success", "message": "Symptoms logged successfully. CHW notified."}
