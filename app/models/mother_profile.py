@@ -16,7 +16,7 @@ class MotherProfile(Base):
     medical_history = Column(JSON, nullable=True, default=dict)
     allergies = Column(Text, nullable=True)
     nearest_facility = Column(String(255), nullable=True)
-    delivery_date = Column(Date, nullable-True)
+    delivery_date = Column(Date, nullable=True)
     is_postnatal = Column(Boolean, default=False)
     
     # pregnancy_status: 'antenatal', 'postpartum'
