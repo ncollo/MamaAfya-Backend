@@ -5,6 +5,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import selectinload
 from datetime import datetime, timedelta
 from typing import List
+import math
 
 from app.database import get_db
 from app.models.user import User
@@ -16,6 +17,62 @@ from app.middleware.auth import require_role
 from app.services.triage_interface import run_triage
 
 router = APIRouter(prefix="/api/chw", tags=["CHW Dashboard"])
+
+@router.get("/triage")
+async def get_triage_queue(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role("chw"))
+):
+    """Fetch all mothers assigned to this specific CHW and format for the dashboard"""
+    stmt = (
+        select(User)
+        .where(User.role == "mother", User.assigned_chw_id == current_user.id)
+        .options(selectinload(User.profile)) # Ensure we load the medical profile
+    )
+    result = await db.execute(stmt)
+    mothers = result.scalars().all()
+
+    patient_list = []
+    for m in mothers:
+        week_str = "Week —"
+        risk_status = "routine"
+        
+        # Calculate dynamic gestational age if LMP is available
+        if m.profile:
+            if m.profile.last_menstrual_period:
+                today = datetime.utcnow().date()
+                
+                # Handle both datetime and date objects safely
+                lmp = m.profile.last_menstrual_period
+                if hasattr(lmp, 'date'):
+                    lmp = lmp.date()
+                    
+                diff = today - lmp
+                weeks = math.floor(diff.days / 7)
+                
+                if 0 < weeks <= 42:
+                    week_str = f"Week {weeks}"
+            
+            # Map backend risk levels to the frontend UI statuses
+            if m.profile.risk_level == "red":
+                risk_status = "high"
+            elif m.profile.risk_level == "yellow":
+                risk_status = "warning"
+            elif m.profile.risk_level == "green":
+                risk_status = "routine"
+        
+        # Format the data exactly how CHWDashboard.jsx expects it
+        patient_list.append({
+            "id": str(m.id),
+            "name": m.full_name,
+            "week": week_str,
+            "status": risk_status,
+            "symptom": "Pending Check-in",
+            "source": "Manual Entry"
+        })
+        
+    return patient_list
+
 
 @router.get("/patients", response_model=List[MotherProfileResponse])
 async def get_assigned_patients(
