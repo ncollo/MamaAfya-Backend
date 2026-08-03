@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
@@ -14,6 +15,7 @@ from app.schemas.symptom_log import SymptomLogResponse
 from app.schemas.appointment import AppointmentResponse
 from app.middleware.auth import get_current_user, require_role
 from pydantic import BaseModel
+from app.services.triage_interface import run_triage
 
 class SOSRequest(BaseModel):
     note: Optional[str] = None
@@ -238,15 +240,48 @@ async def get_own_appointments(
     appointments_res = await db.execute(query)
     return appointments_res.scalars().all()
 
+from fastapi import Request
+from app.models.symptom_log import SymptomLog
+from app.services.triage_interface import run_triage
+
 @router.post("/sos", status_code=status.HTTP_200_OK)
 async def trigger_sos(
     payload: SOSRequest,
+    request: Request, # Added Request to access the Socket.IO instance if you have one
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role("mother"))
 ):
     """Trigger an emergency SOS alert from the React frontend"""
-    # Later: Add your Africa's Talking SMS logic here
-    return {"detail": "SOS alert sent successfully"}
+    
+    # 1. Get the mother's profile ID
+    result = await db.execute(select(MotherProfile).where(MotherProfile.user_id == current_user.id))
+    profile = result.scalars().first()
+    
+    if not profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail="Mother profile not found. Please complete your profile first."
+        )
+
+    # 2. Create a critical, red-alert symptom log
+    emergency_log = SymptomLog(
+        mother_profile_id=profile.id,
+        symptoms="EMERGENCY SOS BUTTON ACTIVATED",
+        source="app_sos",
+        risk_score="red", # Forces the CHW dashboard to flag this immediately
+        triage_notes=payload.note or "Mother triggered the emergency panic button from the dashboard.",
+        logged_by_id=current_user.id
+    )
+    
+    db.add(emergency_log)
+    await db.commit()
+    await db.refresh(emergency_log)
+
+    # 3. Trigger the triage interface (This will eventually fire off your Africa's Talking SMS)
+    sio = getattr(request.app.state, "sio", None)
+    await run_triage(emergency_log.id, db, sio=sio)
+
+    return {"detail": "SOS alert sent successfully and logged in your medical record."}
 
 
 @router.post("/book-visit", status_code=status.HTTP_200_OK)
