@@ -17,7 +17,7 @@ class MotherProfile(Base):
     allergies = Column(Text, nullable=True)
     nearest_facility = Column(String(255), nullable=True)
     delivery_date = Column(Date, nullable=True)
-    is_postnatal = Column(Boolean, default=False)
+    is_postnatal = Column(Boolean, server_default="false", nullable=True)
     
     # pregnancy_status: 'antenatal', 'postpartum'
     pregnancy_status = Column(String(20), default="antenatal")
