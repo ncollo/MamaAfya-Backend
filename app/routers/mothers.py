@@ -13,6 +13,14 @@ from app.schemas.mother_profile import MotherProfileCreate, MotherProfileUpdate,
 from app.schemas.symptom_log import SymptomLogResponse
 from app.schemas.appointment import AppointmentResponse
 from app.middleware.auth import get_current_user, require_role
+from pydantic import BaseModel
+
+class SOSRequest(BaseModel):
+    note: Optional[str] = None
+    
+class BookVisitRequest(BaseModel):
+    reason: Optional[str] = None
+    phone_number: Optional[str] = None
 
 router = APIRouter(prefix="/api/mothers", tags=["Mother Profiles"])
 
@@ -195,3 +203,25 @@ async def get_own_appointments(
     query = query.order_by(Appointment.scheduled_date.asc())
     appointments_res = await db.execute(query)
     return appointments_res.scalars().all()
+
+@router.post("/sos", status_code=status.HTTP_200_OK)
+async def trigger_sos(
+    payload: SOSRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role("mother"))
+):
+    """Trigger an emergency SOS alert from the React frontend"""
+    # Later: Add your Africa's Talking SMS logic here
+    return {"detail": "SOS alert sent successfully"}
+
+
+@router.post("/book-visit", status_code=status.HTTP_200_OK)
+async def book_visit(
+    payload: BookVisitRequest,
+    db: AsyncSession = Depends(get_db)
+    # Note: We omit require_role("mother") here so the Botpress webhook 
+    # can successfully POST to this endpoint without an auth token.
+):
+    """Book a clinic visit or receive a triage alert from Botpress"""
+    # Later: Look up the mother by payload.phone_number and notify the CHW
+    return {"detail": "Visit booked successfully"}
