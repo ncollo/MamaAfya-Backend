@@ -14,6 +14,7 @@ from app.routers.birth_plans import router as birth_plans_router
 from app.routers.chw import router as chw_router
 from app.routers.appointments import router as appointments_router
 from app.sockets.dashboard import register_socket_events
+from app.routers import chatbot
 
 # Set up logging configuration
 logging.basicConfig(
@@ -78,6 +79,7 @@ app.include_router(appointments_router)
 # Include Your Routers
 app.include_router(pwa.router, prefix="/api/pwa", tags=["PWA Endpoints"])
 app.include_router(ussd.router, prefix="/api/ussd", tags=["USSD Webhooks"])
+app.include_router(chatbot.router)
 
 @app.get("/api/health", tags=["Health Checks"])
 async def health_check():
