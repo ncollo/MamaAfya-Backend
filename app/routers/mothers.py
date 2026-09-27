@@ -279,7 +279,7 @@ async def trigger_sos(
     # 2. Create a critical, red-alert symptom log
     emergency_log = SymptomLog(
         mother_profile_id=profile.id,
-        symptoms="EMERGENCY SOS BUTTON ACTIVATED",
+        symptoms=["emergency_button", "EMERGENCY SOS BUTTON ACTIVATED"],
         source="app_sos",
         risk_score="red", # Forces the CHW dashboard to flag this immediately
         triage_notes=payload.note or "Mother triggered the emergency panic button from the dashboard.",
@@ -294,7 +294,11 @@ async def trigger_sos(
     sio = getattr(request.app.state, "sio", None)
     await run_triage(emergency_log.id, db, sio=sio)
 
-    return {"detail": "SOS alert sent successfully and logged in your medical record."}
+    return {
+        "detail": "SOS alert sent successfully and logged in your medical record.",
+        "notified_chw": profile.user.assigned_chw.full_name if profile.user.assigned_chw else "Assigned CHW",
+        "facility": profile.nearest_facility or "Local Health Centre"
+    }
 
 
 @router.post("/book-visit", status_code=status.HTTP_200_OK)
@@ -358,6 +362,46 @@ async def botpress_symptom_webhook(
     return {"status": "success", "message": "Symptoms logged successfully. CHW notified."}
 
 
+@router.get("/patients/{profile_id}/symptom-logs", response_model=List[SymptomLogResponse])
+async def get_patient_symptom_logs(
+    profile_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role("chw", "facility_staff"))
+):
+    """Get symptom logs for a specific patient (for Facility Staff and CHW)"""
+    logs_res = await db.execute(
+        select(SymptomLog)
+        .where(SymptomLog.mother_profile_id == profile_id)
+        .order_by(SymptomLog.logged_at.desc())
+    )
+    return logs_res.scalars().all()
+
+
+@router.post("/record-delivery", status_code=status.HTTP_200_OK)
+async def record_own_delivery(
+    payload: DeliveryRecord,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role("mother"))
+):
+    """Mother records her own delivery, switching her profile to postpartum phase"""
+    result = await db.execute(select(MotherProfile).where(MotherProfile.user_id == current_user.id))
+    profile = result.scalars().first()
+    if not profile:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mother profile not found")
+        
+    profile.delivery_date = payload.delivery_date
+    profile.is_postnatal = True
+    profile.pregnancy_status = "postpartum"
+    if payload.notes:
+        history = profile.medical_history or {}
+        history["delivery_notes"] = payload.notes
+        profile.medical_history = history
+
+    await db.commit()
+    await db.refresh(profile)
+    return {"status": "success", "message": "Congratulations Mama! Profile updated to postpartum recovery care."}
+
+
 @router.post("/patients/{profile_id}/record-delivery", status_code=status.HTTP_200_OK)
 async def record_patient_delivery(
     profile_id: int,
@@ -379,7 +423,8 @@ async def record_patient_delivery(
         
     # 2. Update profile with delivery details
     profile.delivery_date = payload.delivery_date
-    profile.is_postnatal = True # Make sure this column exists in your MotherProfile model, or adapt it to your schema
+    profile.is_postnatal = True
+    profile.pregnancy_status = "postpartum"
     
     # Optional: Save notes into medical history
     if payload.notes:
