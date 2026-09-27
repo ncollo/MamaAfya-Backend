@@ -9,12 +9,26 @@ logger = logging.getLogger(__name__)
 async def notify_chw_dashboard(mother_phone_or_id: str, risk_level: str, symptoms: list):
     """
     BRIDGE FUNCTION: 
-    This is where Collins's Triage Engine hands off data to the Colleague's WebSocket Server.
-    When the colleague finishes the Socket.io setup, they will add their emit logic here.
+    Hands off triage alert data to the Socket.IO server so connected CHW dashboards receive live notifications.
     """
     logger.info(f"SOCKET EMIT TRIGGERED: Alerting dashboard for {mother_phone_or_id} with {risk_level} risk.")
-    # Colleague's future code:
-    # await socket_manager.emit('high_risk_alert', data={"patient": mother_phone_or_id, "risk": risk_level})
+    try:
+        from app.main import sio
+        from datetime import datetime
+        payload = {
+            "patient_id": str(mother_phone_or_id),
+            "risk_level": str(risk_level),
+            "symptoms": symptoms,
+            "timestamp": datetime.now().isoformat(),
+            "alert_type": "high_risk_alert" if str(risk_level).lower() in ["red", "high", "high risk"] else "routine_update"
+        }
+        # Broadcast to all connected CHWs and to any specific rooms
+        await sio.emit("notify_chw_dashboard", payload)
+        await sio.emit("patient_update", payload)
+        if str(risk_level).lower() in ["red", "high", "high risk"]:
+            await sio.emit("new_alert", payload)
+    except Exception as e:
+        logger.error(f"Failed to emit WebSocket alert in notify_chw_dashboard: {e}")
     return True
 
 async def fetch_patient_context(phone_number: str, db: AsyncSession) -> dict:
