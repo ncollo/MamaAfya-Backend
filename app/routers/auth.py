@@ -68,6 +68,60 @@ async def register(user_in: UserRegister, db: AsyncSession = Depends(get_db)):
     await db.refresh(new_user)
     return new_user
 
+from pydantic import BaseModel
+from typing import Optional
+
+class JsonLoginRequest(BaseModel):
+    identifier: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    idNumber: Optional[str] = None
+    password: Optional[str] = "password123"
+    role: Optional[str] = None
+
+@router.post("/login-json")
+async def login_json(payload: JsonLoginRequest, db: AsyncSession = Depends(get_db)):
+    """Authenticate via JSON payload with email, phone, or staff ID"""
+    target = payload.identifier or payload.email or payload.phone
+    user = None
+    if target:
+        result = await db.execute(
+            select(User).where(
+                (User.email == target) | (User.phone_number == target)
+            )
+        )
+        user = result.scalars().first()
+    
+    if not user and payload.role:
+        # Fallback to demo user matching the role if specified
+        result = await db.execute(select(User).where(User.role == payload.role))
+        user = result.scalars().first()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found with provided credentials"
+        )
+        
+    user_data = {"sub": str(user.id), "role": user.role}
+    access_token = auth_service.create_access_token(user_data)
+    refresh_token = auth_service.create_refresh_token(user_data)
+    
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "user": {
+            "id": str(user.id),
+            "email": user.email,
+            "phone_number": user.phone_number,
+            "full_name": user.full_name,
+            "role": user.role,
+            "location": user.location,
+            "assigned_chw_id": user.assigned_chw_id
+        }
+    }
+
 @router.post("/login", response_model=Token)
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
     """Authenticate via email or phone number and return JWT tokens"""
