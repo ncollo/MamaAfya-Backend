@@ -53,7 +53,41 @@ async def create_birth_plan(
     db.add(new_plan)
     await db.commit()
     await db.refresh(new_plan)
-    return new_plan
+@router.get("/me", response_model=BirthPlanResponse)
+async def get_my_birth_plan(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role("mother"))
+):
+    """Get the birth plan for the currently logged-in mother"""
+    res = await db.execute(select(MotherProfile).where(MotherProfile.user_id == current_user.id))
+    profile = res.scalars().first()
+    if not profile:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mother profile not found")
+    
+    stmt = select(BirthPlan).where(BirthPlan.mother_profile_id == profile.id).options(
+        selectinload(BirthPlan.mother_profile).selectinload(MotherProfile.user)
+    )
+    result = await db.execute(stmt)
+    plan = result.scalars().first()
+    if not plan:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No birth plan created yet")
+    return plan
+
+@router.get("/patient/{profile_id}", response_model=BirthPlanResponse)
+async def get_birth_plan_by_profile(
+    profile_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role("chw", "facility_staff"))
+):
+    """Get a mother's birth plan by profile ID (accessible by CHW or facility staff)"""
+    stmt = select(BirthPlan).where(BirthPlan.mother_profile_id == profile_id).options(
+        selectinload(BirthPlan.mother_profile).selectinload(MotherProfile.user)
+    )
+    result = await db.execute(stmt)
+    plan = result.scalars().first()
+    if not plan:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Birth plan not found for this patient")
+    return plan
 
 @router.get("/{plan_id}", response_model=BirthPlanResponse)
 async def get_birth_plan(
